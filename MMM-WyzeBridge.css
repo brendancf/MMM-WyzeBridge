@@ -6,6 +6,10 @@
   justify-content: center;
 }
 
+.camera_wrapper img {
+  width:100%;
+}
+
 .MMM-WyzeBridge .vjs-loading-spinner {
   display: none !important;
 }

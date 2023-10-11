@@ -96,23 +96,32 @@ module.exports = NodeHelper.create({
 
 		var cameras = [];
 		for (var cameraName in data.cameras) {
+
+			Log.info(cameraName)
+
 			const __canShowCamera = (
 				// All cameras should be shown or
 				this.config.filter == 0
 				// Camera match exactly a filter as string
 				|| this.config.filter.includes(cameraName)
 				// Camera match a valid pattern
-				|| this.config.filter.map(p => new RegExp(p, "gi")).some(p => cameraName.match(p))
+				//|| this.config.filter.map(p => new RegExp(p, "gi")).some(p => cameraName.match(p))
 			);
+
 			if (__canShowCamera) {
+
+				Log.info(`Add camera ${cameraName}`)
+
 				var cameraData = {
-					image_url: "/proxy/" + data.cameras[cameraName].snapshot_url,
+					image_url: "/proxy/" + data.cameras[cameraName].img_url,
 					video_url: "/stream/" + data.cameras[cameraName].name_uri + "/stream.m3u8",
 				};
 				for (camAttribute of this.allowedKeys) {
 					cameraData[camAttribute] = data.cameras[cameraName][camAttribute];
 				}
 				cameras.push(cameraData);
+			} else {
+				Log.info(`Skipping camera ${cameraName}`)
 			}
 		}
 		cameras.sort(function (a, b) {
@@ -175,8 +184,8 @@ module.exports = NodeHelper.create({
 	getCameras: function () {
 		var self = this;
 
-		Log.log(self.logPrefix + "Requesting cameras...");
-		axios.get(this.urlPrefix + "/proxy/cameras")
+		Log.log(self.logPrefix + `Requesting cameras... ${this.urlPrefix}`);
+		axios.get(this.urlPrefix + "/proxy/api")
 			.then(function (response) {
 				self.processCameras(response.data);
 			})

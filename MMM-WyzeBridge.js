@@ -12,6 +12,7 @@ Module.register("MMM-WyzeBridge", {
 	 * @property {int} updateInterval Default time to show next camera (in milliseconds). Defaults to 30000.
 	 * @property {int} retryDelay Time to ask to wyze-bridge server for cameras updates (in milliseconds). Defaults to 5000.
 	 * @property {boolean} controls If video player should show its controls. Defaults to false.
+	 * @property {boolean} snapshotOnly  Show only a snapshot rather than a live video feed
 	 * @property {int} height video player height. Defaults to 350.
 	 * @property {int} width video player width. Defaults to 700.
 	 * @property {string} targetHost wyze-bridge host to connect (e.g http://localhost). Defaults to null.
@@ -28,6 +29,7 @@ Module.register("MMM-WyzeBridge", {
 		targetHost: null,
 		targetPort: null,
 		animationSpeed: 400,
+		snapshotOnly: true,
 		filter: [],
 	},
 
@@ -38,8 +40,10 @@ Module.register("MMM-WyzeBridge", {
 	wrapper: null,
 	message: null,
 	messageWrapper: null,
+	cameraWrapper: null,
 	playerWrapper: null,
 	player: null,
+	snapshot: null,
 	cameras: 0,
 
 	// Overrides start method
@@ -91,15 +95,23 @@ Module.register("MMM-WyzeBridge", {
 	 */
 	swapSource: function (camera) {
 		Log.log("Showing camera " + camera.nickname);
-		if (this.player === null) {
-			this.showPlayer();
+
+		if (this.cameraWrapper === null) {
+			this.showCamera();
 		}
-		// this.player.poster("/" + this.name + camera.image_url);
-		this.player.src({
-			src: "/" + this.name + camera.video_url,
-			type: 'application/x-mpegURL',
-		});
-		this.player.play();
+
+		if (this.config.snapshotOnly) {
+			this.snapshot.src = "/" + this.name + camera.image_url;
+		} else {
+			
+			// this.player.poster("/" + this.name + camera.image_url);
+			this.player.src({
+				src: "/" + this.name + camera.video_url,
+				type: 'application/x-mpegURL',
+			});
+
+			this.player.play();
+		}
 	},
 
 	/**
@@ -130,8 +142,10 @@ Module.register("MMM-WyzeBridge", {
 	 * Show message in wrapper and hide the player
 	 */
 	showMessage() {
+		this.clearNode('snapshot');
 		this.clearNode('player');
 		this.clearNode('playerWrapper');
+		this.clearNode('cameraWrapper');
 
 		if (this.messageWrapper === null) {
 			this.messageWrapper = document.createElement("div");
@@ -144,16 +158,43 @@ Module.register("MMM-WyzeBridge", {
 	},
 
 	/**
+	 * Show the camera and hide the message
+	 */
+	showCamera() {
+		this.clearNode('messageWrapper');
+
+		if (this.cameraWrapper == null) {
+			this.cameraWrapper = document.createElement("div")
+			this.cameraWrapper.classList.add("camera_wrapper");
+			this.wrapper.appendChild(this.cameraWrapper)
+		}
+
+		if (this.config.snapshotOnly) {
+			this.showSnapshot();
+		} else {
+			this.showPlayer();
+		}
+
+	},
+
+	showSnapshot() {
+
+		if (this.snapshot === null) {
+			this.snapshot = document.createElement("img")
+			this.cameraWrapper.appendChild(this.snapshot)
+		}
+	},
+
+	/**
 	 * Show player and hide the message
 	 */
 	showPlayer() {
-		this.clearNode('messageWrapper');
 
 		if (this.playerWrapper === null) {
 			this.playerWrapper = document.createElement("video-js");
 			this.playerWrapper.classList.add("player_" + this.name);
 			this.playerWrapper.setAttribute("id", "player_" + this.identifier);
-			this.wrapper.appendChild(this.playerWrapper);
+			this.cameraWrapper.appendChild(this.playerWrapper);
 		}
 
 		if (this.player === null && this.playerWrapper.offsetParent !== null) {
@@ -189,7 +230,7 @@ Module.register("MMM-WyzeBridge", {
 		if (this.message !== null) {
 			this.showMessage();
 		} else {
-			this.showPlayer();
+			this.showCamera();
 		}
 
 		return this.wrapper;
