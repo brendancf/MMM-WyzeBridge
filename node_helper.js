@@ -24,19 +24,19 @@ module.exports = NodeHelper.create({
 		"product_model",
 		"status"
 	],
-	index: 0,
-	cameras: [],
 	readyState: false,
 
 	start: function () {
-		this.config = null;
 		this.readyState = false;
 		Log.info(this.logPrefix + "Started");
-		this.sendNotification("SET_MESSAGE", "LOADING");
+		this.sendNotification("SET_MESSAGE", null, { status: "LOADING" });
 	},
 
-	sendNotification(notification, payload) {
-		this.sendSocketNotification(this.name + "-" + notification, payload);
+	sendNotification(notification, instanceConfig, payload) {
+
+		const id = instanceConfig ? instanceConfig.filter.join('') : null
+
+		this.sendSocketNotification(this.name + "-" + notification, {id, ...payload});
 	},
 
 	socketNotificationReceived: function (notification, payload) {
@@ -45,28 +45,26 @@ module.exports = NodeHelper.create({
 
 		switch (notification) {
 			case "SET_CONFIG":
-				if (this.config === null) {
-					Log.info(this.logPrefix + "Working notification system. Notification:", notification, "payload: ", payload);
-					this.config = payload;
-					this.urlPrefix = this.config.__protocol + "//localhost:" + this.config.__port + "/" + this.name;
-					this.setProxy();
-					this.swapCamera();
-				} else {
-					this.showCamera();
-				}
+				Log.info(this.logPrefix + "Working notification system. Notification:", notification, "payload: ", payload);
+				const config = payload;
+				config.cameras = config.cameras || []
+				config.index = 0
+				this.urlPrefix = config.__protocol + "//localhost:" + config.__port + "/" + this.name;
+				this.setProxy(config);
+				this.swapCamera(config);
 
 				break;
 		}
 	},
 
 	// this you can create extra routes for your module
-	setProxy: function () {
+	setProxy: function (config) {
 		var self = this;
 		this.expressApp.set("etag", false);
 		this.expressApp.use("/" + this.name + "/proxy/*",
 			nocache(),
 			createProxyMiddleware({
-				target: this.config.targetHost + ":" + this.config.targetPort, // target host with the same base path
+				target: config.targetHost + ":" + config.targetPort, // target host with the same base path
 				changeOrigin: true, // needed for virtual hosted sites
 				pathRewrite: function (path, _) {
 					return path.replace(new RegExp("^/" + self.name + "/proxy/"), "/");
@@ -77,7 +75,7 @@ module.exports = NodeHelper.create({
 		this.expressApp.use("/" + this.name + "/stream/*",
 			nocache(),
 			createProxyMiddleware({
-				target: this.config.targetHost + ":8888", // target host with the same base path
+				target: config.targetHost + ":8888", // target host with the same base path
 				changeOrigin: true, // needed for virtual hosted sites
 				pathRewrite: function (path, _) {
 					return path.replace(new RegExp("^/" + self.name + "/stream/"), "/");
@@ -85,27 +83,28 @@ module.exports = NodeHelper.create({
 			})
 		);
 
-		this.getCameras();
+		this.getCameras(config);
 	},
 
-	processCameras: function (data) {
+	processCameras: function (config, data) {
 		var self = this;
 		if (typeof data !== "object" || !data.hasOwnProperty("cameras")) {
 			data = { cameras: {} };
 		}
 
-		var cameras = [];
+		config.cameras = [];
+
 		for (var cameraName in data.cameras) {
 
 			Log.info(cameraName)
 
 			const __canShowCamera = (
 				// All cameras should be shown or
-				this.config.filter == 0
+				config.filter == 0
 				// Camera match exactly a filter as string
-				|| this.config.filter.includes(cameraName)
+				|| config.filter.includes(cameraName)
 				// Camera match a valid pattern
-				//|| this.config.filter.map(p => new RegExp(p, "gi")).some(p => cameraName.match(p))
+				//|| config.filter.map(p => new RegExp(p, "gi")).some(p => cameraName.match(p))
 			);
 
 			if (__canShowCamera) {
@@ -119,87 +118,90 @@ module.exports = NodeHelper.create({
 				for (camAttribute of this.allowedKeys) {
 					cameraData[camAttribute] = data.cameras[cameraName][camAttribute];
 				}
-				cameras.push(cameraData);
+				config.cameras.push(cameraData);
 			} else {
 				Log.info(`Skipping camera ${cameraName}`)
 			}
 		}
-		cameras.sort(function (a, b) {
+		config.cameras.sort(function (a, b) {
 			if (a.nickname < b.nickname) { return -1; }
 			if (a.nickname > b.nickname) { return 1; }
 			return 0;
 		});
 
-		camerasReceived = cameras.map(x => x.nickname);
-		camerasAlreadyDetected = this.cameras.map(x => x.nickname);
+		camerasReceived = config.cameras.map(x => x.nickname);
+		camerasAlreadyDetected = config.cameras.map(x => x.nickname);
 
 		var removedCameras = camerasAlreadyDetected.filter(x => !camerasReceived.includes(x));
 		var newCameras = camerasReceived.filter(x => !camerasAlreadyDetected.includes(x));
+
 		if (newCameras.length + removedCameras.length > 0) {
 			Log.info(self.logPrefix + "Changes received in cameras");
-			this.cameras = cameras;
-			this.index = this.index > (this.cameras.length - 1) ? 0 : this.index;
+			config.cameras = cameras;
+			config.index = config.index > (config.cameras.length - 1) ? 0 : config.index;
 			newCameras.forEach(x => Log.log(self.logPrefix + x + " camera detected"));
 			removedCameras.forEach(x => Log.log(self.logPrefix + x + " camera removed"));
 		}
 	},
 
-	changeIndex: function () {
-		if (this.readyState && this.cameras.length > 0) {
-			if (this.index < (this.cameras.length - 1)) {
-				this.index++;
+	changeIndex: function (config) {
+		if (this.readyState && config.cameras.length > 0) {
+			if (config.index < (config.cameras.length - 1)) {
+				config.index++;
 			} else {
-				this.index = 0;
+				config.index = 0;
 			}
 		}
 	},
 
-	showCamera: function () {
+	showCamera: function (config) {
 		var self = this;
+
 		if (!this.readyState) {
 			Log.info(this.logPrefix + "Still loading");
-			this.sendNotification("SET_MESSAGE", "LOADING");
+			this.sendNotification("SET_MESSAGE", config, { status: "LOADING" });
 		}
-		else if (this.cameras.length == 0) {
+		else if (config.cameras && config.cameras.length == 0) {
 			Log.info(this.logPrefix + "No cameras found. skipping");
-			this.sendNotification("SET_MESSAGE", "NO_CAMS");
+			this.sendNotification("SET_MESSAGE", config, { status: "NO_CAMS" });
 		}
 		else {
-			Log.info(this.logPrefix + "Showing camera " + this.cameras[this.index].nickname);
-			this.sendNotification("SET_CAMERA", this.cameras[this.index]);
+			Log.info(this.logPrefix + "Showing camera " + config.cameras[config.index].nickname);
+			this.sendNotification("SET_CAMERA", config, { camera: config.cameras[config.index] });
 		}
 	},
 
-	swapCamera: function () {
+	swapCamera: function (config) {
 		var self = this;
-		this.showCamera();
-		this.changeIndex();
+		this.showCamera(config);
+		this.changeIndex(config);
 
 		setTimeout(function () {
-			self.swapCamera();
-		}, this.readyState ? this.config.updateInterval : this.config.retryDelay);
+			self.swapCamera(config);
+		}, this.readyState ? config.updateInterval : config.retryDelay);
 	},
 
 	// Test another function
-	getCameras: function () {
+	getCameras: function (config) {
 		var self = this;
 
 		Log.log(self.logPrefix + `Requesting cameras... ${this.urlPrefix}`);
+
 		axios.get(this.urlPrefix + "/proxy/api")
 			.then(function (response) {
-				self.processCameras(response.data);
+				self.processCameras(config, response.data);
 			})
 			.catch(function (error) {
-				self.cameras = [];
+				config.cameras = [];
 				Log.error(self.logPrefix + error.message);
 			})
 			.then(function () {
 				self.readyState = true;
-				self.sendNotification("READY_STATE", self.readyState);
-				self.sendNotification("CAMERAS_UPDATED", self.cameras.length);
+				self.sendNotification("READY_STATE", config, self.readyState);
+				self.sendNotification("CAMERAS_UPDATED", config, { camera_count: config.cameras.length });
 
 				Log.log(self.logPrefix + "Request cameras finished");
-				setTimeout(function () { self.getCameras(); }, self.config.retryDelay);
+				setTimeout(function () { self.getCameras(config); }, config.retryDelay);
 			});
 	}
 });

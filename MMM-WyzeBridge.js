@@ -73,18 +73,22 @@ Module.register("MMM-WyzeBridge", {
 
 	// Override socket notification received method
 	socketNotificationReceived: function (notification, payload) {
+
+		if (payload.id != this.config.filter.join('')) return;
+
 		switch (notification.replace(this.name + "-", "")) {
 			case "CAMERAS_UPDATED":
-				this.cameras = payload;
+				this.cameras = payload.camera_count;
 				break;
 			case "SET_MESSAGE":
-				this.message = this.translate(payload)
+				this.message = this.translate(payload.status)
 				this.updateDom(this.config.animationSpeed);
 				break;
 			case "SET_CAMERA":
 				this.message = null;
 				this.updateDom(this.config.animationSpeed);
-				this.swapSource(payload);
+				Log.log(`Update camera ${payload.camera}`)
+				this.swapSource(payload.camera);
 				break;
 		}
 	},
