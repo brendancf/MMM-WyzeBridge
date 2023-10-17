@@ -47,11 +47,11 @@ module.exports = NodeHelper.create({
 		switch (notification) {
 			case "SET_CONFIG":
 
-				if (typeof(clientInstances[payload.id]) === "undefined") {
+				if (typeof(this.clientInstances[payload.id]) === "undefined") {
 					Log.info(this.logPrefix + "Working notification system. Notification:", notification, "payload: ", payload);
 					const config = payload;
 
-					clientInstances[config.id] = config
+					this.clientInstances[config.id] = config
 
 					config.cameras = config.cameras || []
 					config.index = 0
