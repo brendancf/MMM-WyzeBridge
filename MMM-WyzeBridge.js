@@ -51,6 +51,7 @@ Module.register("MMM-WyzeBridge", {
 		this.config = {
 			...this.defaults,
 			...this.config,
+			id: this.identifier
 		};
 		this.message = this.translate("LOADING");
 
@@ -74,7 +75,7 @@ Module.register("MMM-WyzeBridge", {
 	// Override socket notification received method
 	socketNotificationReceived: function (notification, payload) {
 
-		if (payload.id != this.config.filter.join('')) return;
+		if (payload.id != this.identifier) return;
 
 		switch (notification.replace(this.name + "-", "")) {
 			case "CAMERAS_UPDATED":

@@ -25,6 +25,7 @@ module.exports = NodeHelper.create({
 		"status"
 	],
 	readyState: false,
+	clientInstances: {},
 
 	start: function () {
 		this.readyState = false;
@@ -34,8 +35,8 @@ module.exports = NodeHelper.create({
 
 	sendNotification(notification, instanceConfig, payload) {
 
-		const id = instanceConfig ? instanceConfig.filter.join('') : null
-
+		const id = instanceConfig ? instanceConfig.id : null
+		
 		this.sendSocketNotification(this.name + "-" + notification, {id, ...payload});
 	},
 
@@ -45,13 +46,21 @@ module.exports = NodeHelper.create({
 
 		switch (notification) {
 			case "SET_CONFIG":
-				Log.info(this.logPrefix + "Working notification system. Notification:", notification, "payload: ", payload);
-				const config = payload;
-				config.cameras = config.cameras || []
-				config.index = 0
-				this.urlPrefix = config.__protocol + "//localhost:" + config.__port + "/" + this.name;
-				this.setProxy(config);
-				this.swapCamera(config);
+
+				if (typeof(clientInstances[payload.id]) === "undefined") {
+					Log.info(this.logPrefix + "Working notification system. Notification:", notification, "payload: ", payload);
+					const config = payload;
+
+					clientInstances[config.id] = config
+
+					config.cameras = config.cameras || []
+					config.index = 0
+					this.urlPrefix = config.__protocol + "//localhost:" + config.__port + "/" + this.name;
+					this.setProxy(config);
+					this.swapCamera(config);
+				} else {
+					this.showCamera(payload)
+				}
 
 				break;
 		}
@@ -141,6 +150,7 @@ module.exports = NodeHelper.create({
 			config.index = config.index > (config.cameras.length - 1) ? 0 : config.index;
 			newCameras.forEach(x => Log.log(self.logPrefix + x + " camera detected"));
 			removedCameras.forEach(x => Log.log(self.logPrefix + x + " camera removed"));
+			this.showCamera(config)
 		}
 	},
 
